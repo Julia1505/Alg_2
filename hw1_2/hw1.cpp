@@ -43,6 +43,8 @@ public:
     bool Has(const T& data) const;
     bool Delete(const T& data);
 
+    void TableSize(int size){keysCount = size;}
+
 private:
 
     H hasher;
@@ -55,9 +57,10 @@ private:
     struct HashTableNode {
         T data;
         Status status;
-        int hash;
-        HashTableNode():status(EMPTY), hash(0){}
-        HashTableNode(const T& data, Status status, int hash):data(data), status(status), hash(hash){}
+        int hash1;
+        int hash2;
+        HashTableNode():status(EMPTY), hash1(0), hash2(0){}
+        HashTableNode(const T& data, Status status, int hash1, int hash2):data(data), status(status), hash1(hash1), hash2(hash2){}
 
     };
 
@@ -82,17 +85,17 @@ HashTable<T, H>::~HashTable() {
 
 template<class T, class H>
 bool HashTable<T, H>::Add(const T &data) {
-    if (keysCount > 3 * table.size()) {
+    if (keysCount > 0.75 * table.size()) {
         growTable();
     }
-    unsigned int absHash = hasher(data, true);
-    unsigned int hash1 = absHash % table.size();
-    unsigned int hash2 = hasher(data, false) % table.size();
+    unsigned int absHash1 = hasher(data, true);
+    unsigned int hash1 = absHash1 % table.size();
+    unsigned int absHash2 = hasher(data, false);
+    unsigned int hash2 = absHash2 % table.size();
 
     if (hash2 == 0) {
         hash2++;
     }
-
 
     unsigned int indexDeleted = -1;
 
@@ -110,9 +113,9 @@ bool HashTable<T, H>::Add(const T &data) {
     }
 
     if (indexDeleted == -1) {
-        table[hash1] = new HashTableNode(data, FULL, absHash);
+        table[hash1] = new HashTableNode(data, FULL, absHash1, absHash2);
     } else {
-        table[indexDeleted] = new HashTableNode(data, FULL, absHash);
+        table[indexDeleted] = new HashTableNode(data, FULL, absHash1, absHash2);
     }
     ++keysCount;
 
@@ -165,13 +168,28 @@ void HashTable<T, H>::growTable() {
     unsigned int newSize = table.size() * 2;
     vector<HashTableNode*> newTable(newSize, nullptr);
     for (int i = 0; i < table.size(); ++i) {
-        if (table[i]->status == FULL) {
-            newTable[table[i]->hash % newSize] = table[i];
+        HashTableNode *node = table[i];
+        if (node != nullptr && node->status == FULL) {
+            unsigned int hash1 = table[i]->hash1 % newTable.size();
+            unsigned int hash2 = table[i]->hash2 % newTable.size();
+            if (hash2 == 0) {
+                hash2++;
+            }
+
+            HashTableNode *newNode = newTable[hash1];
+            for (int j = 0; j < newTable.size() && newNode != nullptr && newNode->status != EMPTY; ++i) {
+                hash1 = (hash1 + j * hash2) % newTable.size();
+                newNode = newTable[hash1];
+            }
+            newTable[hash1] = new HashTableNode(table[i]->data, FULL, table[i]->hash1, table[i]->hash2);
+
         }
+        delete table[i];
     }
+    table = std::move(newTable);
+    TableSize(newSize);
 
 }
-
 
 int main() {
     HashTable<string, HasherString> table;
