@@ -12,48 +12,60 @@
 
 class Node;
 
+template <class T>
+struct DefaultComparator {
+    bool isLess(const T& l, const T& r) {
+        return l < r;
+    }
+};
+
+template <class T, class Compare>
 class BitTree {
 private:
     struct Node {
-        int Key;
+        T Key;
         Node* Left;
         Node* Right;
         bool isVisited;
 
-        explicit Node(int key) : Key(key), Left(nullptr), Right(nullptr), isVisited(false) {};
+        explicit Node(T key) : Key(key), Left(nullptr), Right(nullptr), isVisited(false) {};
     };
     Node* root;
+    Compare cmp;
 
     void PostOrderDFS(void visit(Node*));
 
 public:
-    BitTree():root(nullptr){};
+    explicit BitTree(Compare& cmp):root(nullptr), cmp(cmp){};
+    BitTree(const BitTree&) = delete;
     ~BitTree();
 
-    void Add(int key);
+    void Add(T key);
 
     void ShowTree();
 };
 
-BitTree::~BitTree() {
+template <class T, class Compare>
+BitTree<T, Compare>::~BitTree() {
     PostOrderDFS([](Node* node){delete node;});
 }
 
-void  BitTree::Add(int key) {
+template <class T, class Compare>
+void  BitTree<T, Compare>::Add(T key) {
     Node** current = &root;
     while (*current != nullptr) {
         Node& node = **current;
-        if (key < node.Key) {
+        if (cmp.isLess(key, node.Key)) {
             current = &node.Left;
         } else {
             current = &node.Right;
         }
     }
     *current = new Node(key);
-
 }
 
-void BitTree::PostOrderDFS(void (*visit)(Node*)) {
+template <class T, class Compare>
+void BitTree<T, Compare>::PostOrderDFS(void (*visit)(Node*)) {
     Node* current = root;
     std::list<Node*> nodesList;
     nodesList.push_back(current);
@@ -99,22 +111,24 @@ void BitTree::PostOrderDFS(void (*visit)(Node*)) {
 
 }
 
-void BitTree::ShowTree() {
+template <class T, class Compare>
+void BitTree<T, Compare>::ShowTree() {
     PostOrderDFS([](Node* node){std::cout << node->Key << " ";});
 }
 
 
 int main() {
-    BitTree tree;
+    DefaultComparator<int> comparator;
+    BitTree<int, DefaultComparator<int>> tree(comparator);
     int numbeNodes = 0;
     std::cin >> numbeNodes;
     int key;
+
     for (int i = 0; i < numbeNodes; ++i) {
         std::cin >> key;
         tree.Add(key);
     }
 
     tree.ShowTree();
-
     return 0;
 }
