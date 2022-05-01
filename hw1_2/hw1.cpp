@@ -20,12 +20,12 @@ using std::vector;
 struct HasherString {
     unsigned int operator()(const string& str, bool mainHash) const {
         unsigned int hash = 0;
-        int koef = 5;
         if (mainHash) {
-            koef = 7;
-        }
-        for (char i : str) {
-            hash = hash * koef + i;
+            for (char i : str) {
+                hash = hash * 7 + i;
+            }
+        } else {
+            hash = str.size();
         }
         return hash;
     }
@@ -43,7 +43,7 @@ public:
     bool Has(const T& data) const;
     bool Delete(const T& data);
 
-    void TableSize(int size){keysCount = size;}
+    void PrintAll();
 
 private:
 
@@ -57,26 +57,33 @@ private:
     struct HashTableNode {
         T data;
         Status status;
-        int hash1;
-        int hash2;
+        unsigned int hash1;
+        unsigned int hash2;
         HashTableNode():status(EMPTY), hash1(0), hash2(0){}
-        HashTableNode(const T& data, Status status, int hash1, int hash2):data(data), status(status), hash1(hash1), hash2(hash2){}
-
+        HashTableNode(const T& data, Status status, unsigned int hash1, unsigned int hash2):data(data), status(status), hash1(hash1), hash2(hash2){}
+        void Change(T newData, Status newStatus, int newHash1, int newHash2) {
+            data = newData;
+            status = newStatus;
+            hash1 = newHash1;
+            hash2 = newHash2;
+        }
     };
 
-    vector<HashTableNode*> table;
+    vector<HashTableNode> table;
     unsigned int keysCount;
+    unsigned int allKeysCount;
 
     void growTable();
+    void Rehash();
 };
 
 template<class T, class H>
 HashTable<T, H>::HashTable(const H &hasher):
     hasher(hasher),
-    table(8, nullptr),
-    keysCount(0)
-    {
-}
+    table(8),
+    keysCount(0),
+    allKeysCount(0)
+    {}
 
 template<class T, class H>
 HashTable<T, H>::~HashTable() {
@@ -89,22 +96,19 @@ bool HashTable<T, H>::Add(const T &data) {
         growTable();
     }
     unsigned int absHash1 = hasher(data, true);
-    unsigned int hash1 = absHash1 % table.size();
+    unsigned int hash1 = (absHash1 * 2 - 1) % table.size();
     unsigned int absHash2 = hasher(data, false);
-    unsigned int hash2 = absHash2 % table.size();
-
-    if (hash2 == 0) {
-        hash2++;
-    }
+    unsigned int hash2 = (absHash2 * 2 - 1) % table.size();
 
     unsigned int indexDeleted = -1;
 
-    HashTableNode *node = table[hash1];
-    for (int i = 0; i < table.size() && node != nullptr && node->status != EMPTY; ++i) {
-        if (node->data == data && node->status == FULL) {
+    HashTableNode node = table[hash1];
+    for (int i = 0; i < table.size() && node.status != EMPTY; ++i) {
+        if (node.data == data && node.status == FULL) {
             return false;
         }
-        if (node->status == DELETED && indexDeleted == -1) {
+
+        if (node.status == DELETED && indexDeleted == -1) {
             indexDeleted = hash1;
         }
 
@@ -112,29 +116,29 @@ bool HashTable<T, H>::Add(const T &data) {
         node = table[hash1];
     }
 
-    if (indexDeleted == -1) {
-        table[hash1] = new HashTableNode(data, FULL, absHash1, absHash2);
-    } else {
-        table[indexDeleted] = new HashTableNode(data, FULL, absHash1, absHash2);
+    if (indexDeleted != -1) {
+        hash1 = indexDeleted;
     }
+
+    table[hash1].Change(data, FULL, absHash1, absHash2);
+
     ++keysCount;
+    ++allKeysCount;
 
     return true;
 }
 
 template<class T, class H>
 bool HashTable<T, H>::Has(const T &data) const {
-    unsigned int hash1 = hasher(data, true) % table.size();
-    unsigned int hash2 = hasher(data, false) % table.size();
-    if (hash2 == 0) {
-        hash2++;
-    }
+    unsigned int hash1 = (hasher(data, true) * 2 - 1) % table.size();
+    unsigned int hash2 = (hasher(data, false) * 2 - 1) % table.size();
 
-    HashTableNode *node = table[hash1];
-    for (int i = 0; i < table.size() && node != nullptr && node->status != EMPTY; ++i) {
-        if (node->data == data && node->status == FULL) {
+    HashTableNode node = table[hash1];
+    for (int i = 0; i < table.size() && node.status != EMPTY; ++i) {
+        if (node.data == data && node.status == FULL) {
             return true;
         }
+
         hash1 = (hash1 + i * hash2) % table.size();
         node = table[hash1];
     }
@@ -143,52 +147,81 @@ bool HashTable<T, H>::Has(const T &data) const {
 
 template<class T, class H>
 bool HashTable<T, H>::Delete(const T &data) {
-    unsigned int hash1 = hasher(data, true) % table.size();
-    unsigned int hash2 = hasher(data, false) % table.size();
-    if (hash2 == 0) {
-        hash2++;
-    }
+    unsigned int hash1 = (hasher(data, true) * 2 - 1) % table.size();
+    unsigned int hash2 = (hasher(data, false) * 2 - 1) % table.size();
 
-    HashTableNode *node = table[hash1];
-    for (int i = 0; i < table.size() && node != nullptr && node->status != EMPTY; ++i) {
-        if (node->data == data && node->status == FULL) {
-            node->status = DELETED;
+    HashTableNode node = table[hash1];
+    for (int i = 0; i < table.size() && node.status != EMPTY; ++i) {
+        if (node.data == data && node.status == FULL) {
+            table[hash1].status = DELETED;
             --keysCount;
+
+            if (float(allKeysCount - keysCount) / allKeysCount > 0.5) {
+                Rehash();
+            }
             return true;
         }
         hash1 = (hash1 + i * hash2) % table.size();
         node = table[hash1];
     }
 
+
+
     return false;
 }
 
-template<class T, class H>   //  доделать
+template<class T, class H>
 void HashTable<T, H>::growTable() {
     unsigned int newSize = table.size() * 2;
-    vector<HashTableNode*> newTable(newSize, nullptr);
+    vector<HashTableNode> newTable(newSize);
     for (int i = 0; i < table.size(); ++i) {
-        HashTableNode *node = table[i];
-        if (node != nullptr && node->status == FULL) {
-            unsigned int hash1 = table[i]->hash1 % newTable.size();
-            unsigned int hash2 = table[i]->hash2 % newTable.size();
-            if (hash2 == 0) {
-                hash2++;
-            }
+        if (table[i].status == FULL) {
+            unsigned int hash1 = (table[i].hash1 * 2 - 1) % newTable.size();
+            unsigned int hash2 = (table[i].hash2 * 2 - 1) % newTable.size();
 
-            HashTableNode *newNode = newTable[hash1];
-            for (int j = 0; j < newTable.size() && newNode != nullptr && newNode->status != EMPTY; ++i) {
+            HashTableNode newNode = newTable[hash1];
+            for (int j = 0; j < newTable.size() && newNode.status != EMPTY; ++j) {
                 hash1 = (hash1 + j * hash2) % newTable.size();
                 newNode = newTable[hash1];
             }
-            newTable[hash1] = new HashTableNode(table[i]->data, FULL, table[i]->hash1, table[i]->hash2);
+            newTable[hash1].Change(table[i].data, table[i].status, table[i].hash1, table[i].hash2);
 
         }
-        delete table[i];
+
     }
     table = std::move(newTable);
-    TableSize(newSize);
+}
 
+template<class T, class H>
+void HashTable<T, H>::PrintAll() {
+    for (int i = 0; i < table.size(); ++i) {
+        if (table[i].status == FULL) {
+            std::cout << table[i].data << " ";
+        }
+    }
+    std::cout << std::endl;
+}
+
+template<class T, class H>
+void HashTable<T, H>::Rehash() {
+    vector<HashTableNode> newTable(table.size());
+    for (int i = 0; i < table.size(); ++i) {
+        if (table[i].status == FULL) {
+            unsigned int hash1 = (table[i].hash1 * 2 - 1) % newTable.size();
+            unsigned int hash2 = (table[i].hash2 * 2 - 1) % newTable.size();
+
+            HashTableNode newNode = newTable[hash1];
+            for (int j = 0; j < newTable.size() && newNode.status != EMPTY; ++j) {
+                hash1 = (hash1 + j * hash2) % newTable.size();
+                newNode = newTable[hash1];
+            }
+
+            newTable[hash1].Change(table[i].data, table[i].status, table[i].hash1, table[i].hash2);
+        }
+
+    }
+    table = std::move(newTable);
+    allKeysCount = keysCount;
 }
 
 int main() {
@@ -198,13 +231,13 @@ int main() {
     while (std::cin >> operation >> data) {
         switch (operation) {
             case '+':
-                std::cout << (table.Add(data) ? "OK" : "FAIL") << "\n";
+                std::cout << (table.Add(data) ? "OK" : "FAIL") << std::endl;
                 break;
             case '-':
-                std::cout << (table.Delete(data) ? "OK" : "FAIL") << "\n";
+                std::cout << (table.Delete(data) ? "OK" : "FAIL") << std::endl;
                 break;
             case '?':
-                std::cout << (table.Has(data) ? "OK" : "FAIL") << "\n";
+                std::cout << (table.Has(data) ? "OK" : "FAIL") << std::endl;
                 break;
             default:
                 assert(true);
