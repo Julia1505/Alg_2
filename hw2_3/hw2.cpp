@@ -33,8 +33,6 @@ private:
     Node* root;
     Compare cmp;
 
-    void PostOrderDFS(void visit(Node*));
-
 public:
     explicit BitTree(Compare& cmp):root(nullptr), cmp(cmp){};
     BitTree(const BitTree&) = delete;
@@ -42,12 +40,12 @@ public:
 
     void Add(T key);
 
-    void ShowTree();
+    void PostOrderDFS(void visitNode(Node*), void visitKey(int));
 };
 
 template <class T, class Compare>
 BitTree<T, Compare>::~BitTree() {
-    PostOrderDFS([](Node* node){delete node;});
+    PostOrderDFS([](Node* node){delete node;}, nullptr);
 }
 
 template <class T, class Compare>
@@ -65,7 +63,7 @@ void  BitTree<T, Compare>::Add(T key) {
 }
 
 template <class T, class Compare>
-void BitTree<T, Compare>::PostOrderDFS(void (*visit)(Node*)) {
+void BitTree<T, Compare>::PostOrderDFS(void (*visitNode)(Node*), void (*visitKey)(int)) {
     Node* current = root;
     std::list<Node*> nodesList;
     nodesList.push_back(current);
@@ -73,7 +71,6 @@ void BitTree<T, Compare>::PostOrderDFS(void (*visit)(Node*)) {
     do {
         isEnd = true;
         auto it = nodesList.begin();
-        auto itEnd = nodesList.end();
 
         for (; it != nodesList.end(); it++) {
 
@@ -95,7 +92,7 @@ void BitTree<T, Compare>::PostOrderDFS(void (*visit)(Node*)) {
                 current->isVisited = true;
             }
         }
-    } while (isEnd == false);
+    } while (!isEnd);
 
     auto it = nodesList.begin();
 
@@ -106,16 +103,15 @@ void BitTree<T, Compare>::PostOrderDFS(void (*visit)(Node*)) {
     it = nodesList.begin();
 
     for (; it != nodesList.end(); ++it) {
-        visit(*it);
+        if (visitNode != nullptr) {
+            visitNode(*it);
+
+        }
+        if (visitKey != nullptr) {
+            visitKey((*it)->Key);
+        }
     }
-
 }
-
-template <class T, class Compare>
-void BitTree<T, Compare>::ShowTree() {
-    PostOrderDFS([](Node* node){std::cout << node->Key << " ";});
-}
-
 
 int main() {
     DefaultComparator<int> comparator;
@@ -129,6 +125,6 @@ int main() {
         tree.Add(key);
     }
 
-    tree.ShowTree();
+    tree.PostOrderDFS(nullptr, [](int key){std::cout << key << std::endl;});
     return 0;
 }

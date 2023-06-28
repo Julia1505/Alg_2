@@ -1,16 +1,6 @@
-//Задача 4. Использование АВЛ-дерева (5 баллов)
-//Обязательная задача
-//Требование для всех вариантов Задачи 4
-//Решение должно поддерживать передачу функции сравнения снаружи.
-//
-//4_1. Солдаты. В одной военной части решили построить в одну шеренгу по росту.
-//Т.к. часть была далеко не образцовая, то солдаты часто приходили не вовремя, а то их и вовсе приходилось выгонять из шеренги за плохо начищенные сапоги.
-//Однако солдаты в процессе прихода и ухода должны были всегда быть выстроены по росту – сначала самые высокие, а в конце – самые низкие.
-//За расстановку солдат отвечал прапорщик, который заметил интересную особенность – все солдаты в части разного роста.
-//Ваша задача состоит в том, чтобы помочь прапорщику правильно расставлять солдат, а именно для каждого приходящего солдата указывать, перед каким солдатом в строе он должен становится.
-
 #include <iostream>
 #include <cassert>
+#include <string>
 
 template <class T>
 struct DefaultComparator {
@@ -23,15 +13,6 @@ struct DefaultComparator {
     }
 };
 
-struct SoldierComparator {
-    bool IsLess(const int& l, const int& r) {
-        return l > r;
-    }
-
-    bool IsEqual(const int& l, const int& r) {
-        return l == r;
-    }
-};
 
 template <class T, class C>
 class AVLTree {
@@ -67,6 +48,9 @@ private:
     int Count(Node* node);
     T GetKStatRecursion(Node* node, int pos);
     void PostOrderDelete(Node* node);
+    bool IsExistRecursion(Node* node, T key);
+    int NextRecursion(Node* node,T key);
+    int PrevRecursion(Node* node,T key);
 
 public:
     explicit AVLTree(const C& comp):Root(nullptr), Comp(comp){};
@@ -75,8 +59,12 @@ public:
 
     void Add(T key);
     void Delete(T key);
+    bool IsExist(T key);
     int SearchPosition(T key);
     T GetKStat(int pos);
+    int Next(T key, bool &isExists);
+    int Prev(T key, bool &isExists);
+
 };
 
 template <class T, class C>
@@ -174,7 +162,7 @@ typename AVLTree<T, C>::Node* AVLTree<T, C>::AddRecursion(AVLTree::Node *root, T
 
     if (Comp.IsLess(key, root->Key)) {
         root->Left = AddRecursion(root->Left, key);
-    } else {
+    } else if (Comp.IsLess(root->Key, key)){
         root->Right = AddRecursion(root->Right, key);
     }
 
@@ -194,10 +182,16 @@ bool AVLTree<T, C>::DeleteRecursion(AVLTree::Node *&node, T key) {
     }
 
     if (Comp.IsLess(key, node->Key)) {
+        if (node->Left == nullptr) {
+            return true;
+        }
         DeleteRecursion(node->Left, key);
         node = Balance(node);
         return true;
     } else if (Comp.IsLess(node->Key, key)) {
+        if (node->Right == nullptr) {
+            return true;
+        }
         DeleteRecursion(node->Right, key);
         node = Balance(node);
         return true;
@@ -295,28 +289,178 @@ T AVLTree<T, C>::GetKStatRecursion(AVLTree::Node *node, int pos) {
     }
 }
 
-int main() {
-    int N = 0;
-    std::cin >> N;
-    char action;
-    int actionValue = 0;
-//    DefaultComparator<int> comp;
-    SoldierComparator comp;
-    AVLTree<int, SoldierComparator> tree(comp);
+template<class T, class C>
+bool AVLTree<T, C>::IsExistRecursion(AVLTree::Node *node, T key) {
 
-    for (int i = 0; i < N; ++i) {
-        std::cin >> action >> actionValue;
-        switch (action) {
-            case '1':
-                tree.Add(actionValue);
-                std::cout << tree.SearchPosition(actionValue) << " ";
-                break;
-            case '2':
-                tree.Delete(tree.GetKStat(actionValue));
-                break;
-            default:
-                assert(false);
+    if (Comp.IsEqual(key, node->Key)) {
+        return true;
+    }
+
+
+    if (Comp.IsLess(key, node->Key)) {
+        if (node->Left == nullptr) {
+            return false;
         }
+        return IsExistRecursion(node->Left, key);
+    } else {
+        if (node->Right == nullptr) {
+            return false;
+        }
+        return IsExistRecursion(node->Right, key);
+    }
+}
+
+
+
+template<class T, class C>
+bool AVLTree<T, C>::IsExist(T key) {
+    if (Root == nullptr) {
+        return false;
+    }
+    return IsExistRecursion(Root, key);
+}
+
+template<class T, class C>
+int AVLTree<T, C>::Next(T key, bool &isExists) {
+    if (Root == nullptr) {
+        isExists = false;
+        return 0;
+    }
+    Node* node;
+    node = Root;
+    while (node->Key <= key) {
+        if (node->Right == nullptr) {
+            isExists = false;
+            return 0;
+        }
+        node = node->Right;
+    }
+    return NextRecursion(Root, key);
+
+}
+
+template<class T, class C>
+int AVLTree<T, C>::NextRecursion(Node* node, T key) {
+    int temp = node->Key;
+
+    while (node->Key <= key) {
+        if (node->Right == nullptr) {
+            break;
+        }
+        node = node->Right;
+        temp = node->Key;
+    }
+
+    while (node->Left != nullptr && node->Left->Key > key) {
+        node = node->Left;
+        temp = node->Key;
+    }
+
+    if (node->Left != nullptr && node->Left->Right != nullptr) {
+        int tempTwo = NextRecursion(node->Left->Right, key);
+        if (tempTwo < temp && tempTwo > key) {
+            temp = tempTwo;
+        }
+    }
+
+    return temp;
+
+
+}
+
+template<class T, class C>
+int AVLTree<T, C>::PrevRecursion(AVLTree::Node *node, T key) {
+    int temp = node->Key;
+
+    while (node->Key >= key) {
+        if (node->Left == nullptr) {
+            break;
+        }
+        node = node->Left;
+        temp = node->Key;
+    }
+
+    while (node->Right != nullptr && node->Right->Key < key) {
+        node = node->Right;
+        temp = node->Key;
+    }
+
+    if (node->Right != nullptr && node->Right->Left != nullptr) {
+        int tempTwo = NextRecursion(node->Right->Left, key);
+        if (tempTwo > temp && tempTwo < key) {
+            temp = tempTwo;
+        }
+    }
+
+    return temp;
+}
+
+template<class T, class C>
+int AVLTree<T, C>::Prev(T key, bool &isExists) {
+    if (Root == nullptr) {
+        isExists = false;
+        return 0;
+    }
+    Node* node;
+    node = Root;
+    while (node->Key >= key) {
+        if (node->Left == nullptr) {
+            isExists = false;
+            return 0;
+        }
+        node = node->Left;
+    }
+    return PrevRecursion(Root, key);
+}
+
+int main() {
+//    int N = 0;
+//    std::cin >> N;
+    std::string action;
+    int actionValue = 0;
+    DefaultComparator<int> comp;
+    AVLTree<int, DefaultComparator<int>> tree(comp);
+
+//    for (int i = 0; i < N; ++i) {
+    while(std::cin >> action >> actionValue) {
+        if (action == "insert") {
+            tree.Add(actionValue);
+            continue;
+        }
+
+        if (action == "delete") {   // вроде раб
+            tree.Delete(actionValue);
+            continue;
+        }
+
+        if (action == "exists") {
+            std::cout << ((tree.IsExist(actionValue)) ? "true" : "false") << std::endl;
+            continue;
+        }
+
+        if (action == "next") {
+            bool is = true;
+            int res = tree.Next(actionValue, is);
+            if (is) {
+                std::cout << res << std::endl;
+            } else {
+                std::cout << "none" << std::endl;
+            }
+            continue;
+        }
+
+        if (action == "prev") {
+            bool is = true;
+            int res = tree.Prev(actionValue, is);
+            if (is) {
+                std::cout << res << std::endl;
+            } else {
+                std::cout << "none" << std::endl;
+            }
+            continue;
+        }
+
+
     }
 
     return 0;
